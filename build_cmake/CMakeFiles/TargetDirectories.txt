@@ -1,0 +1,8 @@
+E:/EVM-AFFINE_DMVR/build_cmake/CMakeFiles/ALL_BUILD.dir
+E:/EVM-AFFINE_DMVR/build_cmake/CMakeFiles/ZERO_CHECK.dir
+E:/EVM-AFFINE_DMVR/build_cmake/src/CMakeFiles/CommonLib.dir
+E:/EVM-AFFINE_DMVR/build_cmake/src/CMakeFiles/EncoderLib.dir
+E:/EVM-AFFINE_DMVR/build_cmake/src/CMakeFiles/DecoderLib.dir
+E:/EVM-AFFINE_DMVR/build_cmake/app/CMakeFiles/app_encoder.dir
+E:/EVM-AFFINE_DMVR/build_cmake/app/CMakeFiles/app_decoder.dir
+E:/EVM-AFFINE_DMVR/build_cmake/app/CMakeFiles/app_bitstream_merge.dir

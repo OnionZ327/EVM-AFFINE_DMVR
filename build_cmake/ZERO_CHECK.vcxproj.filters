@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="E:\EVM-AFFINE_DMVR\build_cmake\CMakeFiles\c089746b1b7562085bff45d26e8f6d0b\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{5AE3D84C-CB3C-3E84-B845-599604A1B301}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

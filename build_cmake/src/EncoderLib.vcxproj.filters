@@ -1,0 +1,135 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_EncAdaptiveLoopFilter.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_bsw.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_eco.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_esao.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_ibc_hashmap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_mode.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_optimization.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_pibc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_pinter.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_pintra.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_rsd_hashmap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_sad.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_sp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_tbl.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_temporalFilter.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_tq.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\EVM-AFFINE_DMVR\src\enc_util.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_EncAdaptiveLoopFilter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_bsw.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_def.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_eco.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_esao.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_ibc_hash_wrapper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_ibc_hashmap.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_mode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_optimization.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_optimization_wrapper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_pibc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_pinter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_pintra.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_rsd_hash_wrapper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_rsd_hashmap.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_sad.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_sp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_tbl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_temporalFilter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_tq.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\EVM-AFFINE_DMVR\inc\enc_util.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="E:\EVM-AFFINE_DMVR\src\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{78CB0E4D-43BF-3AC3-93F3-BA2364018CB3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{F74819DD-AE12-39D8-B614-CC25402A71C4}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

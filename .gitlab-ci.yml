@@ -1,0 +1,17 @@
+stages:
+  - build
+
+.build_template:
+  stage: build
+  script:
+    - cd build/x86_linux/
+    - make clean
+    - make
+
+build_gcc7:
+   image: gcc:7
+   extends: .build_template   
+
+build_gcc8:
+   image: gcc:8
+   extends: .build_template
