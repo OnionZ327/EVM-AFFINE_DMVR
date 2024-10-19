@@ -5683,9 +5683,11 @@ static void analyze_affine_merge( ENC_CTX *ctx, ENC_CORE *core, double *cost_bes
         mod_info_curr->bgc_idx = mrg_list_bgc_idx[mrg_idx];
 #endif
         mod_info_curr->cu_mode = MODE_DIR;
-        cost = pinter_residue_rdo(ctx, core, 0
+        cost = pinter_residue_rdo(ctx, core, 0, 
 #if AFFINE_DMVR
-                                  , (mod_info_curr->umve_flag == 0) && ctx->info.sqh.dmvr_enable_flag
+        (mod_info_curr->umve_flag == 0) && ctx->info.sqh.dmvr_enable_flag
+#else
+        0
 #endif
         );
 #if AFFINE_UMVE

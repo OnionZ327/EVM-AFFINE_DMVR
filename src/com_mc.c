@@ -6804,8 +6804,149 @@ void process_DMVR( int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REF
 #endif
 
 #if AFFINE_DMVR
-void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], s16(*mv)[VER_NUM][MV_D], COM_REFP(*refp)[REFP_NUM], pel pred[N_C][MAX_CU_DIM], pel pred1[N_C][MAX_CU_DIM]
-    , int poc_c, int iteration, int bit_depth, pel(*dmvr_padding_buf)[N_C][PAD_BUFFER_STRIDE * PAD_BUFFER_STRIDE])
+void affine_mv_clip(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], s16 mv[REFP_NUM][1][MV_D], s16(*mv_t)[1][MV_D])
+{
+    // 定义最小和最大剪辑值数组
+    int min_clip[MV_D], max_clip[MV_D];
+
+    // 将x, y, w, h的值左移两位，相当于乘以4，因为运动矢量的精度是四分之一像素
+    x <<= 2;
+    y <<= 2;
+    w <<= 2;
+    h <<= 2;
+
+#if CTU_256
+    // 如果定义了CTU_256，则使用CTU大小为256的剪辑值
+    min_clip[MV_X] = (-MAX_CU_SIZE2 - 4) << 2;
+    min_clip[MV_Y] = (-MAX_CU_SIZE2 - 4) << 2;
+    max_clip[MV_X] = (pic_w - 1 + MAX_CU_SIZE2 + 4) << 2;
+    max_clip[MV_Y] = (pic_h - 1 + MAX_CU_SIZE2 + 4) << 2;
+#else
+    // 如果没有定义CTU_256，则使用CTU大小为128的剪辑值
+    min_clip[MV_X] = (-MAX_CU_SIZE - 4) << 2;
+    min_clip[MV_Y] = (-MAX_CU_SIZE - 4) << 2;
+    max_clip[MV_X] = (pic_w - 1 + MAX_CU_SIZE + 4) << 2;
+    max_clip[MV_Y] = (pic_h - 1 + MAX_CU_SIZE + 4) << 2;
+#endif
+
+    // 将原始运动矢量赋值给目标数组
+    mv_t[REFP_0][0][MV_X] = mv[REFP_0][0][MV_X];
+    mv_t[REFP_0][0][MV_Y] = mv[REFP_0][0][MV_Y];
+    mv_t[REFP_1][0][MV_X] = mv[REFP_1][0][MV_X];
+    mv_t[REFP_1][0][MV_Y] = mv[REFP_1][0][MV_Y];
+
+    // 对第一个参考图像的运动矢量进行边界检查和调整
+    if (REFI_IS_VALID(refi[REFP_0]))
+    {
+        if (x + mv[REFP_0][0][MV_X] < min_clip[MV_X])
+            mv_t[REFP_0][0][MV_X] = (s16)(min_clip[MV_X] - x);
+        if (y + mv[REFP_0][0][MV_Y] < min_clip[MV_Y])
+            mv_t[REFP_0][0][MV_Y] = (s16)(min_clip[MV_Y] - y);
+        if (x + mv[REFP_0][0][MV_X] + w - 4 > max_clip[MV_X])
+            mv_t[REFP_0][0][MV_X] = (s16)(max_clip[MV_X] - x - w + 4);
+        if (y + mv[REFP_0][MV_Y] + h - 4 > max_clip[MV_Y])
+            mv_t[REFP_0][0][MV_Y] = (s16)(max_clip[MV_Y] - y - h + 4);
+    }
+
+    // 对第二个参考图像的运动矢量进行边界检查和调整
+    if (REFI_IS_VALID(refi[REFP_1]))
+    {
+        if (x + mv[REFP_1][0][MV_X] < min_clip[MV_X])
+            mv_t[REFP_1][0][MV_X] = (s16)(min_clip[MV_X] - x);
+        if (y + mv[REFP_1][0][MV_Y] < min_clip[MV_Y])
+            mv_t[REFP_1][0][MV_Y] = (s16)(min_clip[MV_Y] - y);
+        if (x + mv[REFP_1][0][MV_X] + w - 4 > max_clip[MV_X])
+            mv_t[REFP_1][0][MV_X] = (s16)(max_clip[MV_X] - x - w + 4);
+        if (y + mv[REFP_1][0][MV_Y] + h - 4 > max_clip[MV_Y])
+            mv_t[REFP_1][0][MV_Y] = (s16)(max_clip[MV_Y] - y - h + 4);
+    }
+}
+
+void com_affine_dmvr_refine(
+    int w, int h, pel* ref_l0, int s_ref_l0, pel* ref_l1, int s_ref_l1,
+    s32* min_cost, s16* delta_mvx, s16* delta_mvy, s32* sad_array)
+{
+    SAD_POINT_INDEX idx; // 用于遍历SAD点的索引
+    s32 search_offset_x_back[5] = { 0, 0, 1, -1, 0 }; // 用于回溯搜索的X偏移量
+    s32 search_offset_y_back[5] = { 1, -1, 0, 0, 0 }; // 用于回溯搜索的Y偏移量
+    s32 j = 0; // 迭代变量
+    s32 start_x = 0; // X方向起始偏移量
+    s32 start_y = 0; // Y方向起始偏移量
+    s32 search_offset_x[NUM_SAD_POINTS] = { 0, 0, 0, 1, -1, 0, 1, 2, 1, 0, -1, -2, -1, 2, 1, 2, 1, -1, -2, -2, -1 };
+    s32 search_offset_y[NUM_SAD_POINTS] = { 0, 1, -1, 0, 0, 2, 1, 0, -1, -2, -1, 0, 1, 1, 2, -1, -2, -2, -1, 1, 2 };
+    s32 cost_temp[5][5] = { { INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX },
+    { INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX },
+    { INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX },
+    { INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX },
+    { INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX } };
+
+    s32 center_x = 2; // 中心点的X索引
+    s32 center_y = 2; // 中心点的Y索引
+
+    pel* ref_l0_Orig = ref_l0; // 原始参考图像L0的指针
+    pel* ref_l1_Orig = ref_l1; // 原始参考图像L1的指针
+    for (idx = 0; idx < NUM_SAD_POINTS; ++idx) // 遍历所有SAD点
+    {
+        int sum = 0;
+        ref_l0 = ref_l0_Orig + search_offset_x[idx] + search_offset_y[idx] * s_ref_l0; // 计算新的参考图像L0的指针
+        ref_l1 = ref_l1_Orig - search_offset_x[idx] - search_offset_y[idx] * s_ref_l1; // 计算新的参考图像L1的指针
+        s32 cost = com_DMVR_cost(w, h, ref_l0, ref_l1, s_ref_l0, s_ref_l1); // 计算当前点的成本
+        cost_temp[center_y + search_offset_y[idx]][center_x + search_offset_x[idx]] = cost; // 存储成本
+    }
+
+    *min_cost = cost_temp[center_y][center_x]; // 初始化最小成本为当前中心点的成本
+    for (j = 0; j < 3; j++) // 进行三次迭代以细化运动矢量
+    {
+        s32 delta_x = 0; // X方向的增量
+        s32 delta_y = 0; // Y方向的增量
+
+        for (idx = SAD_BOTTOM; idx < SAD_TOP_LEFT; ++idx) // 遍历回溯搜索点
+        {
+            s32 y_offset = center_y + start_y + search_offset_y_back[idx]; // 计算Y偏移量
+            s32 x_offset = center_x + start_x + search_offset_x_back[idx]; // 计算X偏移量
+            if (x_offset >= 0 && x_offset < 5 && y_offset >= 0 && y_offset < 5) // 确保偏移量在有效范围内
+            {
+                s32 cost = cost_temp[center_y + start_y + search_offset_y_back[idx]][center_x + start_x + search_offset_x_back[idx]]; // 获取当前点的成本
+                if (cost < *min_cost) // 如果找到更小的成本
+                {
+                    *min_cost = cost; // 更新最小成本
+                    delta_x = search_offset_x_back[idx]; // 更新X方向增量
+                    delta_y = search_offset_y_back[idx]; // 更新Y方向增量
+                    if (cost == 0) // 如果成本为0，直接跳出循环
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+        start_x += delta_x; // 更新起始X偏移量
+        start_y += delta_y; // 更新起始Y偏移量
+        if (*min_cost == 0) // 如果最小成本为0，跳出循环
+        {
+            break;
+        }
+
+        if ((delta_x == 0) && (delta_y == 0)) // 如果没有更新，跳出循环
+        {
+            break;
+        }
+    }
+    *delta_mvx = start_x; // 更新最小成本对应的X增量
+    *delta_mvy = start_y; // 更新最小成本对应的Y增量
+
+    if ((abs(*delta_mvx) < center_x) && (abs(*delta_mvy) < center_y)) // 如果增量在中心点附近
+    {
+        *(sad_array + SAD_CENTER) = *min_cost; // 更新SAD数组中的中心点成本
+        for (idx = SAD_BOTTOM; idx < SAD_TOP_LEFT; ++idx) // 遍历所有SAD点
+        {
+            *(sad_array + idx) = cost_temp[center_y + (*delta_mvy) + search_offset_y_back[idx]][center_x + (*delta_mvx) + search_offset_x_back[idx]]; // 更新SAD数组
+        }
+    }
+    ref_l0 = ref_l0_Orig; // 恢复原始的参考图像L0的指针
+    ref_l1 = ref_l1_Orig; // 恢复原始的参考图像L1的指针
+}
+
+void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], s16(*mv)[VER_NUM][MV_D], COM_REFP(*refp)[REFP_NUM])
 {
     // 定义一个缩放步长，用于后续的矢量缩放计算
     s16 ref_pred_mv_scaled_step = 2;
@@ -6818,8 +6959,8 @@ void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 ref
     // 定义一个数组，用于存储裁剪后的起始运动矢量
     s16 starting_mv[REFP_NUM][1][MV_D];
 
-    // 调用mv_clip函数，对运动矢量进行裁剪，确保它们不会超出图像边界
-    mv_clip(x, y, pic_w, pic_h, w, h, refi, mv, starting_mv);
+    // 调用affine_mv_clip函数，对运动矢量进行裁剪，确保它们不会超出图像边界
+    affine_mv_clip(x, y, pic_w, pic_h, w, h, refi, mv, starting_mv);
 
     // 形成整数部分的运动矢量
     s16 sign_x = starting_mv[REFP_0][0][MV_X] >= 0 ? 1 : (-1); // 确定x分量的符号
@@ -6835,17 +6976,17 @@ void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 ref
     abs_y = COM_MIN(abs_y, max_abs_mv); // 裁剪y分量
 
     // 将裁剪后的绝对运动矢量转换回带符号的整数运动矢量
-    starting_mv[REFP_0][MV_X] = (((abs_x) >> 2) << 2); // 将x分量的小数部分舍去
-    starting_mv[REFP_0][MV_Y] = (((abs_y) >> 2) << 2); // 将y分量的小数部分舍去
-    starting_mv[REFP_0][MV_X] += (((xFrac > 2) ? 1 : 0) << 2); // 如果x分量的小数部分大于2，则增加4（相当于0.5像素）
-    starting_mv[REFP_0][MV_Y] += (((yFrac > 2) ? 1 : 0) << 2); // 如果y分量的小数部分大于2，则增加4（相当于0.5像素）
-    starting_mv[REFP_0][MV_X] *= sign_x; // 恢复x分量的符号
-    starting_mv[REFP_0][MV_Y] *= sign_y; // 恢复y分量的符号
+    starting_mv[REFP_0][0][MV_X] = (((abs_x) >> 2) << 2); // 将x分量的小数部分舍去
+    starting_mv[REFP_0][0][MV_Y] = (((abs_y) >> 2) << 2); // 将y分量的小数部分舍去
+    starting_mv[REFP_0][0][MV_X] += (((xFrac > 2) ? 1 : 0) << 2); // 如果x分量的小数部分大于2，则增加4（相当于0.5像素）
+    starting_mv[REFP_0][0][MV_Y] += (((yFrac > 2) ? 1 : 0) << 2); // 如果y分量的小数部分大于2，则增加4（相当于0.5像素）
+    starting_mv[REFP_0][0][MV_X] *= sign_x; // 恢复x分量的符号
+    starting_mv[REFP_0][0][MV_Y] *= sign_y; // 恢复y分量的符号
 
-    sign_x = starting_mv[REFP_1][MV_X] >= 0 ? 1 : (-1);
-    sign_y = starting_mv[REFP_1][MV_Y] >= 0 ? 1 : (-1);
-    abs_x = abs(starting_mv[REFP_1][MV_X]);
-    abs_y = abs(starting_mv[REFP_1][MV_Y]);
+    sign_x = starting_mv[REFP_1][0][MV_X] >= 0 ? 1 : (-1);
+    sign_y = starting_mv[REFP_1][0][MV_Y] >= 0 ? 1 : (-1);
+    abs_x = abs(starting_mv[REFP_1][0][MV_X]);
+    abs_y = abs(starting_mv[REFP_1][0][MV_Y]);
 
     // clip ABSmv
     abs_x = COM_MIN(abs_x, max_abs_mv);
@@ -6853,42 +6994,21 @@ void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 ref
 
     xFrac = abs_x & 3;
     yFrac = abs_y & 3;
-    starting_mv[REFP_1][MV_X] = (((abs_x) >> 2) << 2);
-    starting_mv[REFP_1][MV_Y] = (((abs_y) >> 2) << 2);
-    starting_mv[REFP_1][MV_X] += (((xFrac > 2) ? 1 : 0) << 2);
-    starting_mv[REFP_1][MV_Y] += (((yFrac > 2) ? 1 : 0) << 2);
-    starting_mv[REFP_1][MV_X] *= sign_x;
-    starting_mv[REFP_1][MV_Y] *= sign_y;
+    starting_mv[REFP_1][0][MV_X] = (((abs_x) >> 2) << 2);
+    starting_mv[REFP_1][0][MV_Y] = (((abs_y) >> 2) << 2);
+    starting_mv[REFP_1][0][MV_X] += (((xFrac > 2) ? 1 : 0) << 2);
+    starting_mv[REFP_1][0][MV_Y] += (((yFrac > 2) ? 1 : 0) << 2);
+    starting_mv[REFP_1][0][MV_X] *= sign_x;
+    starting_mv[REFP_1][0][MV_Y] *= sign_y;
 
     // clip ABSmv
     short max_dmvr_mv = (1 << 15) - (3 << 2);
     short min_dmvr_mv = -(1 << 15) + (2 << 2);
-    starting_mv[REFP_0][MV_X] = COM_MIN(max_dmvr_mv, COM_MAX(min_dmvr_mv, starting_mv[REFP_0][MV_X]));
-    starting_mv[REFP_0][MV_Y] = COM_MIN(max_dmvr_mv, COM_MAX(min_dmvr_mv, starting_mv[REFP_0][MV_Y]));
-    starting_mv[REFP_1][MV_X] = COM_MIN(max_dmvr_mv, COM_MAX(min_dmvr_mv, starting_mv[REFP_1][MV_X]));
-    starting_mv[REFP_1][MV_Y] = COM_MIN(max_dmvr_mv, COM_MAX(min_dmvr_mv, starting_mv[REFP_1][MV_Y]));
+    starting_mv[REFP_0][0][MV_X] = COM_MIN(max_dmvr_mv, COM_MAX(min_dmvr_mv, starting_mv[REFP_0][0][MV_X]));
+    starting_mv[REFP_0][0][MV_Y] = COM_MIN(max_dmvr_mv, COM_MAX(min_dmvr_mv, starting_mv[REFP_0][0][MV_Y]));
+    starting_mv[REFP_1][0][MV_X] = COM_MIN(max_dmvr_mv, COM_MAX(min_dmvr_mv, starting_mv[REFP_1][0][MV_X]));
+    starting_mv[REFP_1][0][MV_Y] = COM_MIN(max_dmvr_mv, COM_MAX(min_dmvr_mv, starting_mv[REFP_1][0][MV_Y]));
 
-    // centre address holder for pred
-    // 定义两个数组，用于存储参考图像的预测块地址
-    pel* preds_array[REFP_NUM];
-    pel* preds_centre_array[REFP_NUM];
-
-    // 定义步长，通常用于图像处理中的像素访问
-    int stride = PAD_BUFFER_STRIDE;
-
-    // 初始化preds_array数组，存储两个参考图像的预测块地址
-    preds_array[REFP_0] = dmvr_padding_buf[REFP_0][Y_C];
-    preds_array[REFP_1] = dmvr_padding_buf[REFP_1][Y_C];
-
-    // 定义滤波器的大小，这里使用的是NTAPS_LUMA，通常用于滤波器设计
-    int filter_size = NTAPS_LUMA;
-
-    // 计算滤波器左侧额外像素的数量
-    int num_extra_pixel_left_for_filter = ((filter_size >> 1) - 1);
-
-    // 计算预测块的中心地址，以便进行滤波处理
-    preds_centre_array[REFP_0] = preds_array[REFP_0] + (DMVR_ITER_COUNT + num_extra_pixel_left_for_filter) * ((PAD_BUFFER_STRIDE + 1));
-    preds_centre_array[REFP_1] = preds_array[REFP_1] + (DMVR_ITER_COUNT + num_extra_pixel_left_for_filter) * ((PAD_BUFFER_STRIDE + 1));
 
     // 初始化最小代价变量，用于后续的最优预测块搜索
     int min_cost = INT_MAX;
@@ -6899,11 +7019,6 @@ void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 ref
     // 定义一个数组，用于存储不同方向的代价
     int array_cost[SAD_COUNT];
 
-    // 定义变量dx和dy，用于存储搜索区域的宽度和高度
-    int dx, dy;
-    dy = min(h, DMVR_IMPLIFICATION_SUBCU_SIZE); // 取高度和DMVR_IMPLIFICATION_SUBCU_SIZE中的较小值
-    dx = min(w, DMVR_IMPLIFICATION_SUBCU_SIZE); // 取宽度和DMVR_IMPLIFICATION_SUBCU_SIZE中的较小值
-
     // 初始化总的运动矢量变化量
     s16 total_delta_mv[MV_D] = { 0, 0 };
     BOOL not_zero_cost = 1;  // 标志，用于检测是否找到非零成本的预测
@@ -6913,10 +7028,11 @@ void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 ref
     {
         array_cost[loop] = INT_MAX;
     }
-
+    pel* ref_l0 = refp[refi[REFP_0]][REFP_0].pic;
+    pel* ref_l1 = refp[refi[REFP_1]][REFP_1].pic;
     // 调用运动矢量细化函数，尝试找到最小成本
     min_cost = INT_MAX;
-    com_dmvr_refine(dx, dy, addr_subpu_l0, stride, addr_subpu_l1, stride,
+    com_affine_dmvr_refine(h, w, ref_l0, MAX_CU_SIZE, ref_l1, MAX_CU_SIZE,
         &min_cost,
         &total_delta_mv[MV_X], &total_delta_mv[MV_Y],
         array_cost);
@@ -6956,11 +7072,11 @@ void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 ref
     }
 
     // 更新参考图像0和1的细化后运动矢量
-    refined_mv[REFP_0][MV_X] = (starting_mv[REFP_0][MV_X]) + (total_delta_mv[MV_X]);
-    refined_mv[REFP_0][MV_Y] = (starting_mv[REFP_0][MV_Y]) + (total_delta_mv[MV_Y]);
+    refined_mv[REFP_0][0][MV_X] = (starting_mv[REFP_0][0][MV_X]) + (total_delta_mv[MV_X]);
+    refined_mv[REFP_0][0][MV_Y] = (starting_mv[REFP_0][0][MV_Y]) + (total_delta_mv[MV_Y]);
 
-    refined_mv[REFP_1][MV_X] = (starting_mv[REFP_1][MV_X]) - (total_delta_mv[MV_X]);
-    refined_mv[REFP_1][MV_Y] = (starting_mv[REFP_1][MV_Y]) - (total_delta_mv[MV_Y]);
+    refined_mv[REFP_1][0][MV_X] = (starting_mv[REFP_1][0][MV_X]) - (total_delta_mv[MV_X]);
+    refined_mv[REFP_1][0][MV_Y] = (starting_mv[REFP_1][0][MV_Y]) - (total_delta_mv[MV_Y]);
 }
 #endif
 
@@ -11015,7 +11131,6 @@ void com_affine_mc(COM_INFO *info, COM_MODE *mod_info_curr, COM_REFP(*refp)[REFP
     int poc0 = refp[refi[REFP_0]][REFP_0].ptr;
     int poc1 = refp[refi[REFP_1]][REFP_1].ptr;
     BOOL dmvr_poc_condition = ((BOOL)((dmvr->poc_c - poc0) * (dmvr->poc_c - poc1) < 0)) && (abs(dmvr->poc_c - poc0) == abs(dmvr->poc_c - poc1));//前后参考帧与当前帧时域上间隔一样
-    int iterations_count = DMVR_ITER_COUNT;
 
     dmvr->apply_DMVR = dmvr->apply_DMVR && dmvr_poc_condition;
     dmvr->apply_DMVR = dmvr->apply_DMVR && (REFI_IS_VALID(refi[REFP_0]) && REFI_IS_VALID(refi[REFP_1]));
@@ -11031,14 +11146,11 @@ void com_affine_mc(COM_INFO *info, COM_MODE *mod_info_curr, COM_REFP(*refp)[REFP
 #if INTER_TM
     dmvr->apply_DMVR = dmvr->apply_DMVR && (!mod_info_curr->tm_flag);
 #endif
-#endif
     if (dmvr->apply_DMVR)
     {
-        process_AFFINEDMVR(x, y, pic_w, pic_h, w, h, refi, mv, refp, pred_buf, pred_snd, dmvr->poc_c, dmvr->dmvr_current_template, dmvr->dmvr_ref_pred_interpolated
-            , iterations_count
-            , bit_depth
-            , dmvr->dmvr_padding_buf);
+        process_AFFINEDMVR(x, y, pic_w, pic_h, w, h, refi, mv, refp);
     }
+#endif
     if(REFI_IS_VALID(refi[REFP_0]))
     {
         /* forward */

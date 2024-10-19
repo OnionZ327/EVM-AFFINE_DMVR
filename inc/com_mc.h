@@ -149,8 +149,8 @@ extern COM_DMVR_MC_C ifvc_tbl_dmvr_mc_c[2][2];
 * mc DMVR structure
 *****************************************************************************/
 #if AFFINE_DMVR
-void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], s16(*mv)[VER_NUM][MV_D], COM_REFP(*refp)[REFP_NUM], pel pred[N_C][MAX_CU_DIM], pel pred1[N_C][MAX_CU_DIM]
-    , int poc_c, int iteration, int bit_depth, pel(*dmvr_padding_buf)[N_C][PAD_BUFFER_STRIDE * PAD_BUFFER_STRIDE]);
+void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], s16(*mv)[VER_NUM][MV_D], COM_REFP(*refp)[REFP_NUM]);
+void affine_mv_clip(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], s16 mv[REFP_NUM][1][MV_D], s16(*mv_t)[1][MV_D]);
 #endif
 #if DMVR
 typedef struct _COM_DMVR
