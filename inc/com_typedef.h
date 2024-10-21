@@ -154,7 +154,7 @@ extern "C"
 #define SAWP                               1 // M6099: (CE1 related) Spatial Angular Weighted Prediction
 #define UNIFIED_INTRA_CLIP                 1 // M6519: Unified intra clip in intra prediction
 //inter
-#define AFFINE_DMVR                        0
+#define AFFINE_DMVR                        1
 #define DMVR                               1 // M4813: decoder-side motion vector refinement
 #define BIO                                1 // M4762: Bi-directional Optical Flow
 #define FIX_395                            1 // Fix issue 395

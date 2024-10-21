@@ -6804,6 +6804,59 @@ void process_DMVR( int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REF
 #endif
 
 #if AFFINE_DMVR
+
+static void prefetch_for_affine_mc(
+    int x, int y, int pic_w, int pic_h, int w, int h,
+    s8 refi[REFP_NUM], s16(*mv)[1][MV_D],
+    COM_REFP(*refp)[REFP_NUM],
+    pel dmvr_padding_buf[REFP_NUM][N_C][PAD_BUFFER_STRIDE * PAD_BUFFER_STRIDE]
+)
+{
+    s16 mv_temp[REFP_NUM][1][MV_D];  // 临时存储裁剪后的运动矢量
+    int num_extra_pixel_left_for_filter; // 滤波器额外需要的像素数
+    for (int i = 0; i < REFP_NUM; ++i)
+    {
+        int filter_size = NTAPS_LUMA; // 亮度滤波器的系数数量
+        num_extra_pixel_left_for_filter = ((filter_size >> 1) - 1); // 计算左侧额外像素数
+        int offset = ((DMVR_ITER_COUNT) * (PAD_BUFFER_STRIDE + 1)); // 计算偏移量
+        int pad_size = DMVR_PAD_LENGTH; // 填充大小
+        int qpel_gmv_x, qpel_gmv_y; // 四分之一像素精度的运动矢量
+        COM_PIC* ref_pic; // 引用图像指针
+        mv_clip_only_one_ref_dmvr(x, y, pic_w, pic_h, w, h, mv[i][0], mv_temp[i][0]); // 裁剪运动矢量
+
+        // 计算四分之一像素精度的全局运动矢量
+        qpel_gmv_x = ((x << 2) + mv_temp[i][MV_X]);
+        qpel_gmv_y = ((y << 2) + mv_temp[i][MV_Y]);
+
+        ref_pic = refp[refi[i]][i].pic; // 获取参考图像
+        pel* ref = ref_pic->y + ((qpel_gmv_y >> 2) - num_extra_pixel_left_for_filter) * ref_pic->stride_luma +
+            (qpel_gmv_x >> 2) - num_extra_pixel_left_for_filter; // 计算亮度分量的引用地址
+        pel* dst = dmvr_padding_buf[i][0] + offset; // 计算目标缓冲区的地址
+        copy_buffer(ref, ref_pic->stride_luma, dst, PAD_BUFFER_STRIDE, filter_size, filter_size); // 复制亮度分量
+        padding(dst, PAD_BUFFER_STRIDE, filter_size, filter_size, pad_size, pad_size, pad_size, pad_size); // 填充亮度分量
+
+        // 对色度分量进行相同的处理
+        filter_size = NTAPS_CHROMA; // 色度滤波器的系数数量
+        num_extra_pixel_left_for_filter = ((filter_size >> 1) - 1); // 重新计算左侧额外像素数
+        offset = (DMVR_ITER_COUNT); // 重新计算偏移量
+        offset = offset * (PAD_BUFFER_STRIDE + 1); // 重新计算偏移量
+        pad_size = DMVR_PAD_LENGTH >> 1; // 色度填充大小（通常是亮度的一半）
+
+        // 处理U分量
+        ref = ref_pic->u + ((qpel_gmv_y >> 3) - num_extra_pixel_left_for_filter) * ref_pic->stride_chroma +
+            (qpel_gmv_x >> 3) - num_extra_pixel_left_for_filter;
+        dst = dmvr_padding_buf[i][1] + offset;
+        copy_buffer(ref, ref_pic->stride_chroma, dst, PAD_BUFFER_STRIDE, filter_size, filter_size);
+        padding(dst, PAD_BUFFER_STRIDE, filter_size, filter_size, pad_size, pad_size, pad_size, pad_size);
+
+        // 处理V分量
+        ref = ref_pic->v + ((qpel_gmv_y >> 3) - num_extra_pixel_left_for_filter) * ref_pic->stride_chroma +
+            (qpel_gmv_x >> 3) - num_extra_pixel_left_for_filter;
+        dst = dmvr_padding_buf[i][2] + offset;
+        copy_buffer(ref, ref_pic->stride_chroma, dst, PAD_BUFFER_STRIDE, filter_size, filter_size);
+        padding(dst, PAD_BUFFER_STRIDE, filter_size, filter_size, pad_size, pad_size, pad_size, pad_size);
+    }
+}
 void affine_mv_clip(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], s16 mv[REFP_NUM][1][MV_D], s16(*mv_t)[1][MV_D])
 {
     // 定义最小和最大剪辑值数组
@@ -6946,8 +6999,10 @@ void com_affine_dmvr_refine(
     ref_l1 = ref_l1_Orig; // 恢复原始的参考图像L1的指针
 }
 
-void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], s16(*mv)[VER_NUM][MV_D], COM_REFP(*refp)[REFP_NUM])
+void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], s16(*mv)[VER_NUM][MV_D], COM_REFP(*refp)[REFP_NUM], pel(*dmvr_padding_buf)[N_C][PAD_BUFFER_STRIDE * PAD_BUFFER_STRIDE])
 {
+    s16 sub_pu_L0[(MAX_CU_SIZE * MAX_CU_SIZE) >> (MIN_CU_LOG2 << 1)][MV_D];
+    s16 sub_pu_L1[(MAX_CU_SIZE * MAX_CU_SIZE) >> (MIN_CU_LOG2 << 1)][MV_D];
     // 定义一个缩放步长，用于后续的矢量缩放计算
     s16 ref_pred_mv_scaled_step = 2;
 
@@ -7009,6 +7064,19 @@ void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 ref
     starting_mv[REFP_1][0][MV_X] = COM_MIN(max_dmvr_mv, COM_MAX(min_dmvr_mv, starting_mv[REFP_1][0][MV_X]));
     starting_mv[REFP_1][0][MV_Y] = COM_MIN(max_dmvr_mv, COM_MAX(min_dmvr_mv, starting_mv[REFP_1][0][MV_Y]));
 
+    // centre address holder for pred
+    pel* preds_array[REFP_NUM];
+    pel* preds_centre_array[REFP_NUM];
+
+    int stride = PAD_BUFFER_STRIDE;
+    preds_array[REFP_0] = dmvr_padding_buf[REFP_0][Y_C];
+    preds_array[REFP_1] = dmvr_padding_buf[REFP_1][Y_C];
+
+    int filter_size = NTAPS_LUMA;
+    int num_extra_pixel_left_for_filter = ((filter_size >> 1) - 1);
+    // go to the center point
+    preds_centre_array[REFP_0] = preds_array[REFP_0] + (DMVR_ITER_COUNT + num_extra_pixel_left_for_filter) * ((PAD_BUFFER_STRIDE + 1));
+    preds_centre_array[REFP_1] = preds_array[REFP_1] + (DMVR_ITER_COUNT + num_extra_pixel_left_for_filter) * ((PAD_BUFFER_STRIDE + 1));
 
     // 初始化最小代价变量，用于后续的最优预测块搜索
     int min_cost = INT_MAX;
@@ -7019,20 +7087,27 @@ void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 ref
     // 定义一个数组，用于存储不同方向的代价
     int array_cost[SAD_COUNT];
 
+    int dx, dy;
+    dy = min(h, DMVR_IMPLIFICATION_SUBCU_SIZE);
+    dx = min(w, DMVR_IMPLIFICATION_SUBCU_SIZE);
+
     // 初始化总的运动矢量变化量
     s16 total_delta_mv[MV_D] = { 0, 0 };
     BOOL not_zero_cost = 1;  // 标志，用于检测是否找到非零成本的预测
 
+    prefetch_for_affine_mc(x, y, pic_w, pic_h, dx, dy, refi, starting_mv, refp, dmvr_padding_buf);
+    pel* addr_subpu_l0 = preds_centre_array[REFP_0];
+    pel* addr_subpu_l1 = preds_centre_array[REFP_1];
     // 初始化成本数组，用于存储不同方向的成本
     for (int loop = 0; loop < SAD_COUNT; loop++)
     {
         array_cost[loop] = INT_MAX;
     }
-    pel* ref_l0 = refp[refi[REFP_0]][REFP_0].pic;
-    pel* ref_l1 = refp[refi[REFP_1]][REFP_1].pic;
+
     // 调用运动矢量细化函数，尝试找到最小成本
     min_cost = INT_MAX;
-    com_affine_dmvr_refine(h, w, ref_l0, MAX_CU_SIZE, ref_l1, MAX_CU_SIZE,
+    com_affine_dmvr_refine(dx, dy, addr_subpu_l0, stride, addr_subpu_l1,
+        stride,
         &min_cost,
         &total_delta_mv[MV_X], &total_delta_mv[MV_Y],
         array_cost);
@@ -11131,7 +11206,7 @@ void com_affine_mc(COM_INFO *info, COM_MODE *mod_info_curr, COM_REFP(*refp)[REFP
     int poc0 = refp[refi[REFP_0]][REFP_0].ptr;
     int poc1 = refp[refi[REFP_1]][REFP_1].ptr;
     BOOL dmvr_poc_condition = ((BOOL)((dmvr->poc_c - poc0) * (dmvr->poc_c - poc1) < 0)) && (abs(dmvr->poc_c - poc0) == abs(dmvr->poc_c - poc1));//前后参考帧与当前帧时域上间隔一样
-
+    dmvr->apply_DMVR = dmvr->apply_DMVR && x > 2 && y > 2;
     dmvr->apply_DMVR = dmvr->apply_DMVR && dmvr_poc_condition;
     dmvr->apply_DMVR = dmvr->apply_DMVR && (REFI_IS_VALID(refi[REFP_0]) && REFI_IS_VALID(refi[REFP_1]));
 #if AWP
@@ -11148,7 +11223,7 @@ void com_affine_mc(COM_INFO *info, COM_MODE *mod_info_curr, COM_REFP(*refp)[REFP
 #endif
     if (dmvr->apply_DMVR)
     {
-        process_AFFINEDMVR(x, y, pic_w, pic_h, w, h, refi, mv, refp);
+        process_AFFINEDMVR(x, y, pic_w, pic_h, w, h, refi, mv, refp, dmvr->dmvr_current_template);
     }
 #endif
     if(REFI_IS_VALID(refi[REFP_0]))
