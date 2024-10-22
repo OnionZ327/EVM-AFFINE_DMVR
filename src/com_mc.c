@@ -7071,7 +7071,6 @@ void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 ref
 
     // 定义一个数组，用于存储裁剪后的起始运动矢量
     s16 starting_mv[REFP_NUM][1][MV_D];
-    mv = mv;
     // 调用affine_mv_clip函数，对运动矢量进行裁剪，确保它们不会超出图像边界
     affine_mv_clip(x, y, pic_w, pic_h, w, h, refi, mv, starting_mv);
 
