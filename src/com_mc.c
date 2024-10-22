@@ -6619,9 +6619,11 @@ void process_DMVR( int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REF
 
     // 定义一个数组，用于存储裁剪后的起始运动矢量
     s16 starting_mv[REFP_NUM][MV_D];
-
-    // 调用mv_clip函数，对运动矢量进行裁剪，确保它们不会超出图像边界
-    mv_clip(x, y, pic_w, pic_h, w, h, refi, mv, starting_mv);
+    if (refined_mv[0][MV_X] > 2)
+    {
+        // 调用mv_clip函数，对运动矢量进行裁剪，确保它们不会超出图像边界
+        mv_clip(x, y, pic_w, pic_h, w, h, refi, mv, starting_mv);
+    }
 
     // 形成整数部分的运动矢量
     s16 sign_x = starting_mv[REFP_0][MV_X] >= 0 ? 1 : (-1); // 确定x分量的符号
@@ -6804,7 +6806,64 @@ void process_DMVR( int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REF
 #endif
 
 #if AFFINE_DMVR
+static BOOL affine_mv_clip_only_one_ref_dmvr(int x, int y, int pic_w, int pic_h, int w, int h, s16 mv[1][MV_D], s16(*mv_t)[1])
+{
+    // 定义一个标志，用于指示是否需要裁剪
+    BOOL clip_flag = 0;
 
+    // 定义最小和最大剪辑值数组
+    int min_clip[MV_D], max_clip[MV_D];
+
+    // 将x, y, w, h的值左移两位，相当于乘以4，因为运动矢量的精度是四分之一像素
+    x <<= 2;
+    y <<= 2;
+    w <<= 2;
+    h <<= 2;
+
+    // 根据CTU_256宏定义选择裁剪边界
+#if CTU_256
+    // 如果定义了CTU_256，则使用CTU大小为256的裁剪值
+    min_clip[MV_X] = (-MAX_CU_SIZE2) << 2;
+    min_clip[MV_Y] = (-MAX_CU_SIZE2) << 2;
+    max_clip[MV_X] = (pic_w - 1 + MAX_CU_SIZE2) << 2;
+    max_clip[MV_Y] = (pic_h - 1 + MAX_CU_SIZE2) << 2;
+#else
+    // 如果没有定义CTU_256，则使用CTU大小为128的裁剪值
+    min_clip[MV_X] = (-MAX_CU_SIZE) << 2;
+    min_clip[MV_Y] = (-MAX_CU_SIZE) << 2;
+    max_clip[MV_X] = (pic_w - 1 + MAX_CU_SIZE) << 2;
+    max_clip[MV_Y] = (pic_h - 1 + MAX_CU_SIZE) << 2;
+#endif
+
+    // 将原始运动矢量赋值给目标数组
+    mv_t[0][MV_X] = mv[0][MV_X];
+    mv_t[0][MV_Y] = mv[0][MV_Y];
+
+    // 检查并裁剪水平运动矢量
+    if (x + mv[0][MV_X] < min_clip[MV_X])
+    {
+        clip_flag = 1;  // 设置裁剪标志
+        mv_t[0][MV_X] = min_clip[MV_X] - x;  // 裁剪运动矢量
+    }
+    if (y + mv[0][MV_Y] < min_clip[MV_Y])
+    {
+        clip_flag = 1;  // 设置裁剪标志
+        mv_t[0][MV_Y] = min_clip[MV_Y] - y;  // 裁剪运动矢量
+    }
+    if (x + mv[0][MV_X] + w - 4 > max_clip[MV_X])
+    {
+        clip_flag = 1;  // 设置裁剪标志
+        mv_t[0][MV_X] = max_clip[MV_X] - x - w + 4;  // 裁剪运动矢量
+    }
+    if (y + mv[0][MV_Y] + h - 4 > max_clip[MV_Y])
+    {
+        clip_flag = 1;  // 设置裁剪标志
+        mv_t[0][MV_Y] = max_clip[MV_Y] - y - h + 4;  // 裁剪运动矢量
+    }
+
+    // 返回是否进行了裁剪的标志
+    return clip_flag;
+}
 static void prefetch_for_affine_mc(
     int x, int y, int pic_w, int pic_h, int w, int h,
     s8 refi[REFP_NUM], s16(*mv)[1][MV_D],
@@ -6822,11 +6881,11 @@ static void prefetch_for_affine_mc(
         int pad_size = DMVR_PAD_LENGTH; // 填充大小
         int qpel_gmv_x, qpel_gmv_y; // 四分之一像素精度的运动矢量
         COM_PIC* ref_pic; // 引用图像指针
-        mv_clip_only_one_ref_dmvr(x, y, pic_w, pic_h, w, h, mv[i][0], mv_temp[i][0]); // 裁剪运动矢量
+        affine_mv_clip_only_one_ref_dmvr(x, y, pic_w, pic_h, w, h, mv[i], mv_temp[i]); // 裁剪运动矢量
 
         // 计算四分之一像素精度的全局运动矢量
-        qpel_gmv_x = ((x << 2) + mv_temp[i][MV_X]);
-        qpel_gmv_y = ((y << 2) + mv_temp[i][MV_Y]);
+        qpel_gmv_x = (x << 2) + mv_temp[i][0][MV_X];
+        qpel_gmv_y = (y << 2) + mv_temp[i][0][MV_Y];
 
         ref_pic = refp[refi[i]][i].pic; // 获取参考图像
         pel* ref = ref_pic->y + ((qpel_gmv_y >> 2) - num_extra_pixel_left_for_filter) * ref_pic->stride_luma +
@@ -6857,7 +6916,7 @@ static void prefetch_for_affine_mc(
         padding(dst, PAD_BUFFER_STRIDE, filter_size, filter_size, pad_size, pad_size, pad_size, pad_size);
     }
 }
-void affine_mv_clip(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], s16 mv[REFP_NUM][1][MV_D], s16(*mv_t)[1][MV_D])
+void affine_mv_clip(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], s16 (*mv)[VER_NUM][MV_D], s16(*mv_t)[1][MV_D])
 {
     // 定义最小和最大剪辑值数组
     int min_clip[MV_D], max_clip[MV_D];
@@ -6897,7 +6956,7 @@ void affine_mv_clip(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[RE
             mv_t[REFP_0][0][MV_Y] = (s16)(min_clip[MV_Y] - y);
         if (x + mv[REFP_0][0][MV_X] + w - 4 > max_clip[MV_X])
             mv_t[REFP_0][0][MV_X] = (s16)(max_clip[MV_X] - x - w + 4);
-        if (y + mv[REFP_0][MV_Y] + h - 4 > max_clip[MV_Y])
+        if (y + mv[REFP_0][0][MV_Y] + h - 4 > max_clip[MV_Y])
             mv_t[REFP_0][0][MV_Y] = (s16)(max_clip[MV_Y] - y - h + 4);
     }
 
@@ -7087,15 +7146,15 @@ void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 ref
     // 定义一个数组，用于存储不同方向的代价
     int array_cost[SAD_COUNT];
 
-    int dx, dy;
+    /*int dx, dy;
     dy = min(h, DMVR_IMPLIFICATION_SUBCU_SIZE);
-    dx = min(w, DMVR_IMPLIFICATION_SUBCU_SIZE);
+    dx = min(w, DMVR_IMPLIFICATION_SUBCU_SIZE);*/
 
     // 初始化总的运动矢量变化量
     s16 total_delta_mv[MV_D] = { 0, 0 };
     BOOL not_zero_cost = 1;  // 标志，用于检测是否找到非零成本的预测
 
-    prefetch_for_affine_mc(x, y, pic_w, pic_h, dx, dy, refi, starting_mv, refp, dmvr_padding_buf);
+    prefetch_for_affine_mc(x, y, pic_w, pic_h, h, w, refi, starting_mv, refp, dmvr_padding_buf);
     pel* addr_subpu_l0 = preds_centre_array[REFP_0];
     pel* addr_subpu_l1 = preds_centre_array[REFP_1];
     // 初始化成本数组，用于存储不同方向的成本
@@ -7106,7 +7165,7 @@ void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 ref
 
     // 调用运动矢量细化函数，尝试找到最小成本
     min_cost = INT_MAX;
-    com_affine_dmvr_refine(dx, dy, addr_subpu_l0, stride, addr_subpu_l1,
+    com_affine_dmvr_refine(h, w, addr_subpu_l0, stride, addr_subpu_l1,
         stride,
         &min_cost,
         &total_delta_mv[MV_X], &total_delta_mv[MV_Y],
@@ -11206,7 +11265,7 @@ void com_affine_mc(COM_INFO *info, COM_MODE *mod_info_curr, COM_REFP(*refp)[REFP
     int poc0 = refp[refi[REFP_0]][REFP_0].ptr;
     int poc1 = refp[refi[REFP_1]][REFP_1].ptr;
     BOOL dmvr_poc_condition = ((BOOL)((dmvr->poc_c - poc0) * (dmvr->poc_c - poc1) < 0)) && (abs(dmvr->poc_c - poc0) == abs(dmvr->poc_c - poc1));//前后参考帧与当前帧时域上间隔一样
-    dmvr->apply_DMVR = dmvr->apply_DMVR && x > 2 && y > 2;
+    //dmvr->apply_DMVR = dmvr->apply_DMVR && x > 2 && y > 2;
     dmvr->apply_DMVR = dmvr->apply_DMVR && dmvr_poc_condition;
     dmvr->apply_DMVR = dmvr->apply_DMVR && (REFI_IS_VALID(refi[REFP_0]) && REFI_IS_VALID(refi[REFP_1]));
 #if AWP
