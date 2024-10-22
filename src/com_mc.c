@@ -6806,9 +6806,9 @@ void process_DMVR( int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REF
 #endif
 
 #if AFFINE_DMVR
-static BOOL affine_mv_clip_only_one_ref_dmvr(int x, int y, int pic_w, int pic_h, int w, int h, s16 mv[1][MV_D], s16(*mv_t)[1])
+static BOOL affine_mv_clip_only_one_ref_dmvr(int x, int y, int pic_w, int pic_h, int w, int h, s16 mv[1][MV_D], s16(*mv_t)[MV_D])
 {
-    // 定义一个标志，用于指示是否需要裁剪
+    // 定义一个标志，用于指示是否需要裁剪s
     BOOL clip_flag = 0;
 
     // 定义最小和最大剪辑值数组
@@ -6866,7 +6866,7 @@ static BOOL affine_mv_clip_only_one_ref_dmvr(int x, int y, int pic_w, int pic_h,
 }
 static void prefetch_for_affine_mc(
     int x, int y, int pic_w, int pic_h, int w, int h,
-    s8 refi[REFP_NUM], s16(*mv)[1][MV_D],
+    s8 refi[REFP_NUM], s16 (*mv)[1][MV_D],
     COM_REFP(*refp)[REFP_NUM],
     pel dmvr_padding_buf[REFP_NUM][N_C][PAD_BUFFER_STRIDE * PAD_BUFFER_STRIDE]
 )
@@ -6877,7 +6877,8 @@ static void prefetch_for_affine_mc(
     {
         int filter_size = NTAPS_LUMA; // 亮度滤波器的系数数量
         num_extra_pixel_left_for_filter = ((filter_size >> 1) - 1); // 计算左侧额外像素数
-        int offset = ((DMVR_ITER_COUNT) * (PAD_BUFFER_STRIDE + 1)); // 计算偏移量
+        int offset = ((DMVR_ITER_COUNT) * (PAD_BUFFER_STRIDE + 1)); // 计算偏移量+		mv[i]	0x0000009efb361a4c {0x0000009efb361a4c {8, 4}}	short[1][2]
+
         int pad_size = DMVR_PAD_LENGTH; // 填充大小
         int qpel_gmv_x, qpel_gmv_y; // 四分之一像素精度的运动矢量
         COM_PIC* ref_pic; // 引用图像指针
@@ -6916,7 +6917,7 @@ static void prefetch_for_affine_mc(
         padding(dst, PAD_BUFFER_STRIDE, filter_size, filter_size, pad_size, pad_size, pad_size, pad_size);
     }
 }
-void affine_mv_clip(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], s16 (*mv)[VER_NUM][MV_D], s16(*mv_t)[1][MV_D])
+void affine_mv_clip(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], CPMV(*mv)[VER_NUM][MV_D], s16(*mv_t)[1][MV_D])
 {
     // 定义最小和最大剪辑值数组
     int min_clip[MV_D], max_clip[MV_D];
@@ -7058,7 +7059,7 @@ void com_affine_dmvr_refine(
     ref_l1 = ref_l1_Orig; // 恢复原始的参考图像L1的指针
 }
 
-void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], s16(*mv)[VER_NUM][MV_D], COM_REFP(*refp)[REFP_NUM], pel(*dmvr_padding_buf)[N_C][PAD_BUFFER_STRIDE * PAD_BUFFER_STRIDE])
+void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 refi[REFP_NUM], CPMV(*mv)[VER_NUM][MV_D], COM_REFP(*refp)[REFP_NUM], pel(*dmvr_padding_buf)[N_C][PAD_BUFFER_STRIDE * PAD_BUFFER_STRIDE])
 {
     s16 sub_pu_L0[(MAX_CU_SIZE * MAX_CU_SIZE) >> (MIN_CU_LOG2 << 1)][MV_D];
     s16 sub_pu_L1[(MAX_CU_SIZE * MAX_CU_SIZE) >> (MIN_CU_LOG2 << 1)][MV_D];
@@ -7070,7 +7071,7 @@ void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 ref
 
     // 定义一个数组，用于存储裁剪后的起始运动矢量
     s16 starting_mv[REFP_NUM][1][MV_D];
-
+    mv = mv;
     // 调用affine_mv_clip函数，对运动矢量进行裁剪，确保它们不会超出图像边界
     affine_mv_clip(x, y, pic_w, pic_h, w, h, refi, mv, starting_mv);
 
