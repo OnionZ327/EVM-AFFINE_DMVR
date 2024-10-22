@@ -7062,13 +7062,11 @@ void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 ref
 {
     s16 sub_pu_L0[(MAX_CU_SIZE * MAX_CU_SIZE) >> (MIN_CU_LOG2 << 1)][MV_D];
     s16 sub_pu_L1[(MAX_CU_SIZE * MAX_CU_SIZE) >> (MIN_CU_LOG2 << 1)][MV_D];
-    // 定义一个缩放步长，用于后续的矢量缩放计算
-    s16 ref_pred_mv_scaled_step = 2;
 
     // 定义一个数组，用于存储经过初步处理的运动矢量
-    s16 refined_mv[REFP_NUM][1][MV_D] = { { mv[REFP_0][0][MV_X], mv[REFP_0][0][MV_Y] },
+    /*s16 refined_mv[REFP_NUM][1][MV_D] = {{mv[REFP_0][0][MV_X], mv[REFP_0][0][MV_Y]},
                                        { mv[REFP_1][0][MV_X], mv[REFP_1][0][MV_Y] }
-    };
+    };*/
 
     // 定义一个数组，用于存储裁剪后的起始运动矢量
     s16 starting_mv[REFP_NUM][1][MV_D];
@@ -7206,11 +7204,10 @@ void process_AFFINEDMVR(int x, int y, int pic_w, int pic_h, int w, int h, s8 ref
     }
 
     // 更新参考图像0和1的细化后运动矢量
-    refined_mv[REFP_0][0][MV_X] = (starting_mv[REFP_0][0][MV_X]) + (total_delta_mv[MV_X]);
-    refined_mv[REFP_0][0][MV_Y] = (starting_mv[REFP_0][0][MV_Y]) + (total_delta_mv[MV_Y]);
-
-    refined_mv[REFP_1][0][MV_X] = (starting_mv[REFP_1][0][MV_X]) - (total_delta_mv[MV_X]);
-    refined_mv[REFP_1][0][MV_Y] = (starting_mv[REFP_1][0][MV_Y]) - (total_delta_mv[MV_Y]);
+    mv[REFP_0][0][MV_X] = (starting_mv[REFP_0][0][MV_X]) + (total_delta_mv[MV_X]);
+    mv[REFP_0][0][MV_Y] = (starting_mv[REFP_0][0][MV_Y]) + (total_delta_mv[MV_Y]);
+    mv[REFP_1][0][MV_X] = (starting_mv[REFP_1][0][MV_X]) - (total_delta_mv[MV_X]);
+    mv[REFP_1][0][MV_Y] = (starting_mv[REFP_1][0][MV_Y]) - (total_delta_mv[MV_Y]);
 }
 #endif
 
