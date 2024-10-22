@@ -11279,7 +11279,7 @@ void com_affine_mc(COM_INFO *info, COM_MODE *mod_info_curr, COM_REFP(*refp)[REFP
 #endif
     if (dmvr->apply_DMVR)
     {
-        process_AFFINEDMVR(x, y, pic_w, pic_h, w, h, refi, mv, refp, dmvr->dmvr_current_template);
+        process_AFFINEDMVR(x, y, pic_w, pic_h, w, h, refi, mv, refp, dmvr->dmvr_padding_buf);
     }
 #endif
     if(REFI_IS_VALID(refi[REFP_0]))
