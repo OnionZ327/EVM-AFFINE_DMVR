@@ -6877,7 +6877,7 @@ static void prefetch_for_affine_mc(
     {
         int filter_size = NTAPS_LUMA; // 亮度滤波器的系数数量
         num_extra_pixel_left_for_filter = ((filter_size >> 1) - 1); // 计算左侧额外像素数
-        int offset = ((DMVR_ITER_COUNT) * (PAD_BUFFER_STRIDE + 1)); // 计算偏移量+		mv[i]	0x0000009efb361a4c {0x0000009efb361a4c {8, 4}}	short[1][2]
+        int offset = ((DMVR_ITER_COUNT) * (PAD_BUFFER_STRIDE + 1)); // 计算偏移量
 
         int pad_size = DMVR_PAD_LENGTH; // 填充大小
         int qpel_gmv_x, qpel_gmv_y; // 四分之一像素精度的运动矢量
